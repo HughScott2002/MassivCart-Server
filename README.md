@@ -95,95 +95,66 @@ Supabase PostgreSQL
 
 ## Quick Start
 
-### Dependencies
-
-Everything the dev environment needs, and what each piece is for:
-
-| Dependency | Required? | What it's for |
-|---|---|---|
-| [Docker](https://docs.docker.com/get-docker/) + Compose | **Yes** | Runs the local Supabase stack and the `make up` API container |
-| [Supabase CLI](https://supabase.com/docs/guides/local-development) | **Yes** | Starts local Postgres + Auth + Realtime (`supabase start`) — no cloud account needed |
-| [Nix](https://nixos.org/download) with flakes | Recommended | Provides the exact Bun, Node 22, and Make versions (see below) |
-| Node.js 22+, [Bun](https://bun.sh), GNU Make | Only without Nix | Manual alternative to the Nix shell |
-| [Anthropic API key](https://console.anthropic.com) | Optional | Enables `/api/receipt` (receipt OCR) and LLM mode for `/api/command` |
-| [Upstash Redis](https://upstash.com) | Optional | Response caching — disabled when unset |
-| [Google Places API key](https://developers.google.com/maps/documentation/places/web-service) | Optional | `/api/admin` store sync from Google Places |
-
-The core loop — browse stores, products, prices, sign-in — works with just
-the required rows. The optional keys each unlock the feature listed next to
-them and nothing else breaks without them.
-
-#### What is Nix, and why is it here?
-
-[Nix](https://nixos.org/download) is a package manager that reads this
-repo's `flake.nix` and drops you into a shell with the **exact same
-toolchain versions on every machine** (pinned in `flake.lock`) — nothing
-installed globally, nothing to uninstall later. Usage:
-
-```bash
-nix develop    # enter the dev shell (first run downloads the toolchain)
-exit           # leave it — your system is untouched
-```
-
-If you use [direnv](https://direnv.net), `direnv allow` once makes the
-shell load automatically every time you `cd` in. Flakes may need enabling
-on a fresh Nix install — add `experimental-features = nix-command flakes`
-to `~/.config/nix/nix.conf` (the [Determinate installer](https://determinate.systems/nix-installer/)
-ships with this on).
-
-Don't want Nix? Install Node 22+, Bun, and GNU Make yourself and every
-command below works the same.
+You need [Docker](https://docs.docker.com/get-docker/) + Compose, the
+[Supabase CLI](https://supabase.com/docs/guides/local-development), and a
+toolchain — [Nix](https://nixos.org/download) gives you the right one in one
+command, or install Node 22+, [Bun](https://bun.sh), and GNU Make yourself.
+No cloud accounts, no secrets: the database, auth, and sample data all run
+locally.
 
 ### 1. Clone & enter the dev shell
 
 ```bash
-git clone https://github.com/HughScott2002/MassivCartAPI.git
-cd MassivCartAPI
-nix develop        # provides bun, node 22, make; auto-runs bun install
+git clone https://github.com/HughScott2002/MassivCart-Server.git
+cd MassivCart-Server
+nix develop   # no Nix? skip this line — you're using your own Node/Bun/Make
 ```
 
-### 2. Configure
+<details>
+<summary><b>What is Nix?</b> (and direnv, and enabling flakes)</summary>
 
-Copy `.env.example` to `.env` (the `make` targets below do this automatically
-on first run). The defaults point at the **local Supabase stack** with its
-deterministic development keys — no editing needed for a working dev build.
+Nix reads this repo's `flake.nix` and drops you into a shell with the exact
+toolchain versions pinned in `flake.lock` — same on every machine, nothing
+installed globally, `exit` leaves your system untouched. First run downloads
+the toolchain and runs `bun install` for you.
 
-Optional extras to fill in:
+- Fresh Nix install? Enable flakes: add `experimental-features = nix-command flakes`
+  to `~/.config/nix/nix.conf` (the [Determinate installer](https://determinate.systems/nix-installer/) ships with this on).
+- [direnv](https://direnv.net) user? `direnv allow` once, and the shell loads
+  automatically on every `cd`.
 
-```env
-# Anthropic — enables /api/receipt and LLM mode for /api/command
-ANTHROPIC_API_KEY=<api-key>
+</details>
 
-# Upstash Redis — enables caching (disabled when blank)
-UPSTASH_REDIS_REST_URL=https://<db>.upstash.io
-UPSTASH_REDIS_REST_TOKEN=<token>
-```
-
-Using a **cloud Supabase project** instead? Swap `SUPABASE_URL`,
-`SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` for your project's
-values (and set `COMPOSE_SUPABASE_URL` if running the API in docker).
-
-> The server validates `SUPABASE_URL` and `SUPABASE_ANON_KEY` at startup via
-> Zod and throws immediately if either is missing. Upstash variables are
-> optional — blank means caching is disabled.
-
-### 3. Run
-
-One command each, pick your mode:
+### 2. Run
 
 ```bash
-make dev    # hot-reload dev server on http://localhost:8000 (bun + tsx watch)
-make up     # containerized API on http://localhost:8000 (docker compose, detached)
+make dev    # hot-reload dev server on http://localhost:8000
+make up     # same API, containerized (docker compose, detached)
 ```
 
-Both start the local Supabase stack first (`supabase start` — Postgres, Auth,
-Realtime on `:54321`) and apply `supabase/migrations/`, which creates the
-schema **and seeds sample stores, products, and prices**, so the API serves
-real data immediately. Supabase Studio runs at <http://localhost:54323>.
+Either one does everything: creates `.env` from `.env.example` (defaults
+work as-is), starts local Supabase (Postgres + Auth + Realtime on `:54321`),
+and applies `supabase/migrations/` — schema **plus sample stores, products,
+and prices**, so the API serves real data immediately.
 
-`make logs` follows container output; `make down` stops the API container and
-the Supabase stack. `make seed` (optional) loads the larger cached dataset
-from `data/` — no API keys required.
+Handy extras: `make logs` (follow container output), `make down` (stop
+everything), `make seed` (bigger dataset from `data/`, no API keys needed),
+Supabase Studio at <http://localhost:54323>.
+
+### 3. Optional API keys
+
+Everything above works with none of these. Each unlocks one feature:
+
+| Key in `.env` | Unlocks |
+|---|---|
+| [`ANTHROPIC_API_KEY`](https://console.anthropic.com) | `/api/receipt` OCR + LLM mode for `/api/command` |
+| [`UPSTASH_REDIS_REST_URL` + `_TOKEN`](https://upstash.com) | Response caching |
+| [`GOOGLE_PLACES_API_KEY`](https://developers.google.com/maps/documentation/places/web-service) | `/api/admin` store sync |
+
+Using a **cloud Supabase project** instead of the local stack? Swap
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in
+`.env` for your project's values (and set `COMPOSE_SUPABASE_URL` if running
+the API in docker).
 
 ### 4. Verify
 
@@ -312,11 +283,11 @@ All caching uses [Upstash Redis](https://upstash.com) via the `@upstash/redis` R
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start dev server with hot-reload (`tsx watch`) |
-| `npm run build` | Compile TypeScript → `dist/` |
-| `npm start` | Run compiled server from `dist/` |
-| `npm test` | Run unit tests (Node built-in test runner) |
-| `npm run test:endpoints` | Run integration tests against a live server |
+| `bun run dev` | Start dev server with hot-reload (`tsx watch`) |
+| `bun run build` | Compile TypeScript → `dist/` |
+| `bun run start` | Run compiled server from `dist/` |
+| `bun run test` | Run unit tests (Node built-in test runner) |
+| `bun run test:endpoints` | Run integration tests against a live server |
 
 ### GCP Cloud Run Deployment
 
