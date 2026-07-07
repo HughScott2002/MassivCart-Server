@@ -45,7 +45,11 @@ seed:
 	cp .env.example .env
 	@echo "Created .env from .env.example — local Supabase works as-is; add API keys for LLM features"
 
-# ── Cloud Run deploy ──────────────────────────────────────────────────────────
+# ── Cloud Run deploy (maintainer's personal setup) ────────────────────────────
+# These targets deploy to MY GCP project (Artifact Registry + Cloud Run) and
+# read a gitignored env.yaml. They will not work for anyone else as-is —
+# deploying your own instance needs your own infra config. The Dockerfile is
+# a standard multi-stage node build; any container host can run it.
 
 ## First-time setup: create Artifact Registry repo + configure Docker auth
 registry:
