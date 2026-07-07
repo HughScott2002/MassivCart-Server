@@ -105,8 +105,8 @@ locally.
 ### 1. Clone & enter the dev shell
 
 ```bash
-git clone https://github.com/HughScott2002/MassivCartAPI.git
-cd MassivCartAPI
+git clone https://github.com/HughScott2002/MassivCart-Server.git
+cd MassivCart-Server
 nix develop   # no Nix? skip this line — you're using your own Node/Bun/Make
 ```
 
