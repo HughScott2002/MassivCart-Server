@@ -4,3 +4,6 @@ dist
 .gitignore
 .env
 npm-debug.log*
+
+# Untracked WIP — not part of the build (imports pg, which is not a dependency)
+src/db/postgres-client.ts
