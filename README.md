@@ -90,59 +90,65 @@ Supabase PostgreSQL
 
 ### Prerequisites
 
-- Node.js 22+
-- [Supabase](https://supabase.com) project with `stores`, `products`, `prices`, `users`, and `receipts` tables
-- [Upstash Redis](https://upstash.com) database (REST API)
-- [Anthropic API key](https://console.anthropic.com) (required for `/api/command` and `/api/receipt`)
+- [Nix](https://nixos.org/download) with flakes — **or** Node.js 22+, [Bun](https://bun.sh), and GNU Make installed manually
+- Docker + Compose and the [Supabase CLI](https://supabase.com/docs/guides/local-development) — the database, auth, and realtime all run locally; no cloud account needed
+- [Anthropic API key](https://console.anthropic.com) (optional — required only for `/api/command` LLM mode and `/api/receipt`)
+- [Upstash Redis](https://upstash.com) database (optional — caching is disabled when unset)
 
-### 1. Clone & configure
+### 1. Clone & enter the dev shell
 
 ```bash
 git clone https://github.com/HughScott2002/MassivCartAPI.git
 cd MassivCartAPI
+nix develop        # provides bun, node 22, make; auto-runs bun install
 ```
 
-Copy `.example.env` to `.env` and fill in all values:
+Direnv users: `direnv allow` does the same on every `cd`.
+
+### 2. Configure
+
+Copy `.env.example` to `.env` (the `make` targets below do this automatically
+on first run). The defaults point at the **local Supabase stack** with its
+deterministic development keys — no editing needed for a working dev build.
+
+Optional extras to fill in:
 
 ```env
-# Supabase
-SUPABASE_URL=https://<project>.supabase.co
-SUPABASE_ANON_KEY=<anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>   # optional — enables admin writes
+# Anthropic — enables /api/receipt and LLM mode for /api/command
+ANTHROPIC_API_KEY=<api-key>
 
-# Upstash Redis (serverless REST)
+# Upstash Redis — enables caching (disabled when blank)
 UPSTASH_REDIS_REST_URL=https://<db>.upstash.io
 UPSTASH_REDIS_REST_TOKEN=<token>
-
-# Anthropic — required for /api/command and /api/receipt
-ANTHROPIC_API_KEY=<api-key>
-ANTHROPIC_MODEL=claude-sonnet-4-6              # optional — this is the default
-
-# Server
-PORT=8000                                       # optional — defaults to 8000
-FRONTEND_URL=http://localhost:3000             # CORS allow-origin
 ```
 
-> The server validates the four required variables (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`) at startup via Zod and throws immediately if any are missing.
+Using a **cloud Supabase project** instead? Swap `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` for your project's
+values (and set `COMPOSE_SUPABASE_URL` if running the API in docker).
 
-### 2. Install & run
+> The server validates `SUPABASE_URL` and `SUPABASE_ANON_KEY` at startup via
+> Zod and throws immediately if either is missing. Upstash variables are
+> optional — blank means caching is disabled.
+
+### 3. Run
+
+One command each, pick your mode:
 
 ```bash
-npm install
-npm run dev        # hot-reload via tsx watch
+make dev    # hot-reload dev server on http://localhost:8000 (bun + tsx watch)
+make up     # containerized API on http://localhost:8000 (docker compose, detached)
 ```
 
-The API is available at `http://localhost:8000`.
+Both start the local Supabase stack first (`supabase start` — Postgres, Auth,
+Realtime on `:54321`) and apply `supabase/migrations/`, which creates the
+schema **and seeds sample stores, products, and prices**, so the API serves
+real data immediately. Supabase Studio runs at <http://localhost:54323>.
 
-### Run with Docker
+`make logs` follows container output; `make down` stops the API container and
+the Supabase stack. `make seed` (optional) loads the larger cached dataset
+from `data/` — no API keys required.
 
-```bash
-docker compose up --build
-```
-
-The container maps to `http://localhost:3000` by default (override with `PORT=` in `.env`).
-
-### 3. Verify
+### 4. Verify
 
 ```bash
 bash scripts/test-endpoints.sh

@@ -3,10 +3,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "${PORT:-3000}:3000"
+    env_file: .env
     environment:
-      PORT: 3000
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      PORT: 8000
+      # Container-reachable URL for the local Supabase stack on the host.
+      # Using cloud Supabase in docker? Set COMPOSE_SUPABASE_URL in .env.
+      SUPABASE_URL: ${COMPOSE_SUPABASE_URL:-http://host.docker.internal:54321}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"

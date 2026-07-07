@@ -5,7 +5,47 @@ REPO        := massivecart
 IMAGE       := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/api
 TAG         := $(shell git rev-parse --short HEAD 2>/dev/null || echo "latest")
 
-.PHONY: registry build push deploy release
+.PHONY: registry build push deploy release up down logs dev db db-stop seed
+
+# ── Local dev ─────────────────────────────────────────────────────────────────
+
+## Containerized API on http://localhost:8000 (starts local Supabase first)
+up: .env db
+	docker compose up --build -d
+	@echo "API running on http://localhost:8000 — 'make logs' to follow, 'make down' to stop"
+
+## Stop the API container and the local Supabase stack
+down:
+	docker compose down
+	supabase stop
+
+## Follow container logs
+logs:
+	docker compose logs -f
+
+## Hot-reload dev server on http://localhost:8000 (starts local Supabase first)
+dev: .env db
+	bun install
+	bun run dev
+
+## Local Supabase (Postgres + Auth + Realtime on :54321) — idempotent
+db:
+	supabase start
+
+db-stop:
+	supabase stop
+
+## Optional: larger dataset from the cached seed files in data/
+seed:
+	bun install
+	bunx tsx scripts/seed-products.ts
+	bunx tsx scripts/seed-synthetic.ts
+
+.env:
+	cp .env.example .env
+	@echo "Created .env from .env.example — local Supabase works as-is; add API keys for LLM features"
+
+# ── Cloud Run deploy ──────────────────────────────────────────────────────────
 
 ## First-time setup: create Artifact Registry repo + configure Docker auth
 registry:
