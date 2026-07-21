@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "node --import tsx --test tests/**/*.test.ts",
+    "vision:extract": "tsx scripts/vision-extract.ts",
     "test:endpoints": "bash scripts/test-endpoints.sh"
   },
   "repository": {
