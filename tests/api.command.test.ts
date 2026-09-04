@@ -6,6 +6,12 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { Readable, Writable } from "node:stream";
 
+// The route picks its parser at module load: COMMAND_LLM=true wires up
+// makeCommandRunner(getProvider()), anything else falls back to the offline
+// regex parser. These tests exercise the LLM branch, so the flag has to be set
+// before src/app.ts is required.
+process.env.COMMAND_LLM = "true";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
@@ -115,7 +121,7 @@ installModuleStub(supabaseModulePath, {
 installModuleStub(searchServiceModulePath, {
   async performSearch(request: Record<string, unknown>) {
     searchCalls.push(request);
-    return searchResults;
+    return { results: searchResults };
   },
 });
 
@@ -232,6 +238,19 @@ async function requestJson(
   };
 }
 
+// 502 is the route's catch-all, so a shape mismatch anywhere inside the handler
+// surfaces as a bare status code. Carry the body into the failure message.
+function assertStatus(
+  response: { status: number; body: any },
+  expected: number,
+) {
+  assert.equal(
+    response.status,
+    expected,
+    `expected ${expected}, got ${response.status}: ${JSON.stringify(response.body)}`,
+  );
+}
+
 function assertCommandShape(body: any) {
   assert.equal(typeof body, "object");
   assert.ok(body);
@@ -246,7 +265,7 @@ function assertCommandShape(body: any) {
 test("POST /api/command returns 400 when message is missing", async () => {
   const response = await requestJson("/api/command", { intent: "find" });
 
-  assert.equal(response.status, 400);
+  assertStatus(response, 400);
   assert.deepEqual(
     Object.keys(response.body).sort(),
     ["details", "error", "ok"],
@@ -294,7 +313,7 @@ test('POST /api/command handles "cheapest rice" with find intent', async () => {
     userLng: -76.79,
   });
 
-  assert.equal(response.status, 200);
+  assertStatus(response, 200);
   assertCommandShape(response.body);
   assert.deepEqual(response.body, {
     budget: null,
@@ -326,7 +345,7 @@ test('POST /api/command handles "my budget is 5000"', async () => {
     intent: "find",
   });
 
-  assert.equal(response.status, 200);
+  assertStatus(response, 200);
   assertCommandShape(response.body);
   assert.deepEqual(response.body, {
     budget: 5000,
@@ -377,7 +396,7 @@ test('POST /api/command handles "set budget to 4000 and find rice" and persists 
     savingsMode: 0,
   });
 
-  assert.equal(response.status, 200);
+  assertStatus(response, 200);
   assertCommandShape(response.body);
   assert.deepEqual(response.body, {
     budget: 4000,
@@ -396,7 +415,7 @@ test('POST /api/command handles "set budget to 4000 and find rice" and persists 
     },
   ]);
   assert.deepEqual(cacheDeleteCalls, [
-    "user:00000000-0000-0000-0000-000000000001",
+    "dashboard:user:00000000-0000-0000-0000-000000000001",
   ]);
   assert.deepEqual(searchCalls, [
     {
@@ -416,7 +435,7 @@ test("POST /api/command returns 502 when the command provider fails", async () =
     intent: "find",
   });
 
-  assert.equal(response.status, 502);
+  assertStatus(response, 502);
   assert.deepEqual(response.body, {
     action: "error",
     text: "Command service unavailable.",
