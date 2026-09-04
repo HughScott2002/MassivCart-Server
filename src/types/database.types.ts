@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.4"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -35,21 +55,21 @@ export type Database = {
       prescription_items: {
         Row: {
           dosage: string | null
-          drug_name: string
+          drug_name: string | null
           id: number
           prescription_id: number | null
           quantity: number | null
         }
         Insert: {
           dosage?: string | null
-          drug_name: string
+          drug_name?: string | null
           id?: number
           prescription_id?: number | null
           quantity?: number | null
         }
         Update: {
           dosage?: string | null
-          drug_name?: string
+          drug_name?: string | null
           id?: number
           prescription_id?: number | null
           quantity?: number | null
@@ -110,13 +130,6 @@ export type Database = {
             referencedRelation: "stores"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "prescriptions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
         ]
       }
       prices: {
@@ -173,28 +186,87 @@ export type Database = {
           },
         ]
       }
+      product_images: {
+        Row: {
+          attribution: string | null
+          created_at: string | null
+          id: number
+          license: string | null
+          match_confidence: number | null
+          product_id: number
+          source: string
+          source_url: string | null
+          status: string
+          storage_path: string
+        }
+        Insert: {
+          attribution?: string | null
+          created_at?: string | null
+          id?: number
+          license?: string | null
+          match_confidence?: number | null
+          product_id: number
+          source: string
+          source_url?: string | null
+          status?: string
+          storage_path: string
+        }
+        Update: {
+          attribution?: string | null
+          created_at?: string | null
+          id?: number
+          license?: string | null
+          match_confidence?: number | null
+          product_id?: number
+          source?: string
+          source_url?: string | null
+          status?: string
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_images_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           aliases: string[] | null
+          brand: string | null
           canonical_name: string
           category: string | null
+          gtin: string | null
           id: number
+          size_unit: string | null
+          size_value: number | null
           typical_unit_price: number | null
           unit_type: string | null
         }
         Insert: {
           aliases?: string[] | null
+          brand?: string | null
           canonical_name: string
           category?: string | null
+          gtin?: string | null
           id?: number
+          size_unit?: string | null
+          size_value?: number | null
           typical_unit_price?: number | null
           unit_type?: string | null
         }
         Update: {
           aliases?: string[] | null
+          brand?: string | null
           canonical_name?: string
           category?: string | null
+          gtin?: string | null
           id?: number
+          size_unit?: string | null
+          size_value?: number | null
           typical_unit_price?: number | null
           unit_type?: string | null
         }
@@ -251,13 +323,6 @@ export type Database = {
             referencedRelation: "stores"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "receipts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
         ]
       }
       shopping_list_items: {
@@ -311,6 +376,7 @@ export type Database = {
       stores: {
         Row: {
           branch: string | null
+          created_at: string | null
           id: number
           is_synthetic: boolean | null
           latitude: number | null
@@ -323,6 +389,7 @@ export type Database = {
         }
         Insert: {
           branch?: string | null
+          created_at?: string | null
           id?: number
           is_synthetic?: boolean | null
           latitude?: number | null
@@ -335,6 +402,7 @@ export type Database = {
         }
         Update: {
           branch?: string | null
+          created_at?: string | null
           id?: number
           is_synthetic?: boolean | null
           latitude?: number | null
@@ -400,7 +468,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
@@ -529,7 +598,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+
