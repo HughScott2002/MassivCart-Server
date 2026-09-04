@@ -3,16 +3,19 @@ import {
   cacheDelete,
   invalidateDashboardPriceCaches,
 } from "../lib/cache.js";
-import { OCRFactory } from "../ocr/index.js";
-import { normalizeMediaType } from "../ocr/claude-ocr.js";
-import type { OCRUpload } from "../ocr/types.js";
+import {
+  DEFAULT_VISION_MODEL,
+  MAX_IMAGE_BYTES,
+  extractReceipt,
+  normalizeMediaType,
+  openrouterAnalyzer,
+  type ReceiptImageUpload,
+} from "../vision/index.js";
 import { logError, logInfo } from "../utils/logger.js";
 import { processReceiptConfirm } from "../processing/receipt-processor.js";
 import { supabase } from "../db/supabase-client.js";
 
 const router = Router();
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const KNOWN_TYPES = ["receipt", "prescription", "gas_price", "shopping_list"];
 
 function getRequestUserId(req: Request): string | null {
   const headerValue = req.headers["x-user-id"];
@@ -34,7 +37,7 @@ async function readRequestBody(req: NodeJS.ReadableStream): Promise<Buffer> {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     totalBytes += buffer.length;
 
-    if (totalBytes > MAX_UPLOAD_BYTES) {
+    if (totalBytes > MAX_IMAGE_BYTES) {
       throw new Error("Uploaded image exceeds 5 MB limit");
     }
 
@@ -44,7 +47,10 @@ async function readRequestBody(req: NodeJS.ReadableStream): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-function parseImageUpload(contentType: string | undefined, body: Buffer): OCRUpload | null {
+function parseImageUpload(
+  contentType: string | undefined,
+  body: Buffer,
+): ReceiptImageUpload | null {
   const boundaryMatch = contentType?.match(/boundary=([^;]+)/i);
   if (!boundaryMatch) {
     logInfo("Receipt upload parse failed: multipart boundary missing", {
@@ -122,11 +128,11 @@ router.post("/api/receipt", async (req, res) => {
           ? Number(contentLengthHeader[0])
           : NaN;
 
-    if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_BYTES) {
+    if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
       logInfo("Receipt OCR rejected before reading body", {
         reason: "content_length_exceeds_limit",
         contentLength,
-        limitBytes: MAX_UPLOAD_BYTES,
+        limitBytes: MAX_IMAGE_BYTES,
         contentType: req.headers["content-type"] ?? null,
       });
       res.status(413).json({ error: "Image exceeds 5 MB limit" });
@@ -145,32 +151,55 @@ router.post("/api/receipt", async (req, res) => {
       return;
     }
 
-    const ocrProvider = OCRFactory.getDefaultProvider();
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      throw new Error("Missing OPENROUTER_API_KEY");
+    }
+    const model = process.env.OPENROUTER_MODEL ?? DEFAULT_VISION_MODEL;
+    const analyze = openrouterAnalyzer({ apiKey, model });
+
     logInfo("Receipt OCR started", {
-      provider: ocrProvider.getName(),
+      provider: `openrouter:${model}`,
       filename: upload.filename,
       bytes: upload.buffer.length,
       mediaType: upload.mediaType,
     });
 
-    const receiptData = await ocrProvider.extractReceipt(upload);
-    if (!receiptData.imageType || !KNOWN_TYPES.includes(receiptData.imageType)) {
-      logInfo("Receipt OCR rejected after provider call", {
-        reason: "unknown_image_type",
+    const result = await extractReceipt(upload, analyze, logInfo);
+    if (!result.ok) {
+      const visionError = result.error;
+
+      if (visionError.kind === "unrecognized_image") {
+        logInfo("Receipt OCR rejected after provider call", {
+          reason: "unknown_image_type",
+          filename: upload.filename,
+          mediaType: upload.mediaType,
+        });
+        res.status(422).json({
+          error:
+            "That doesn't look like a receipt, prescription, gas price board, or shopping list. Please try a clearer photo.",
+        });
+        return;
+      }
+
+      logError("Receipt OCR failed", undefined, {
+        path: "/api/receipt",
         filename: upload.filename,
-        mediaType: upload.mediaType,
-        imageType: receiptData.imageType ?? null,
-        itemCount: receiptData.items.length,
-        store: receiptData.store ?? null,
-        total: receiptData.total ?? null,
-        payload: receiptData,
+        provider: `openrouter:${model}`,
+        visionError,
       });
-      res.status(422).json({
-        error:
-          "That doesn't look like a receipt, prescription, gas price board, or shopping list. Please try a clearer photo.",
-      });
+
+      if (visionError.kind === "malformed_json" || visionError.kind === "schema") {
+        res.status(500).json({ error: "OCR processing failed" });
+        return;
+      }
+
+      // timeout | network | http | empty_response — provider-side trouble
+      res.status(502).json({ error: "OCR service is unavailable. Please try again." });
       return;
     }
+
+    const receiptData = result.value;
 
     logInfo("Receipt OCR completed", {
       filename: upload.filename,
