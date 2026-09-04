@@ -54,6 +54,7 @@ let dataAccessCalls = {
   getStores: 0,
   getProducts: 0,
   getPrices: 0,
+  getPricesForProducts: 0,
 };
 let cacheSetKeys: string[] = [];
 
@@ -101,6 +102,11 @@ installModuleStub(dataAccessModulePath, {
   async getPrices() {
     dataAccessCalls.getPrices += 1;
     return prices;
+  },
+  async getPricesForProducts(productIds: number[]) {
+    dataAccessCalls.getPricesForProducts += 1;
+    if (productIds.length === 0) return [];
+    return prices.filter((price) => productIds.includes(price.product_id ?? -1));
   },
 });
 
@@ -203,6 +209,7 @@ beforeEach(() => {
     getStores: 0,
     getProducts: 0,
     getPrices: 0,
+    getPricesForProducts: 0,
   };
   cacheSetKeys = [];
 });
@@ -279,6 +286,19 @@ async function requestJson(
   };
 }
 
+// A bare `500 !== 200` says nothing about why the route broke, and these stubs
+// drift whenever the module graph moves. Put the body in the failure message.
+function assertStatus(
+  response: { status: number; body: any },
+  expected: number,
+) {
+  assert.equal(
+    response.status,
+    expected,
+    `expected ${expected}, got ${response.status}: ${JSON.stringify(response.body)}`,
+  );
+}
+
 function assertSearchItemShape(item: any) {
   assert.equal(typeof item.product_id, "number");
   assert.equal(typeof item.canonical_name, "string");
@@ -314,7 +334,7 @@ test("POST /api/search returns 400 when terms is an empty array", async () => {
 test("POST /api/search returns a single-term match with the current route shape", async () => {
   const response = await requestJson("/api/search", { terms: ["rice"] });
 
-  assert.equal(response.status, 200);
+  assertStatus(response, 200);
   assert.ok(Array.isArray(response.body));
   assert.equal(response.body.length, 1);
   assertSearchItemShape(response.body[0]);
@@ -323,10 +343,13 @@ test("POST /api/search returns a single-term match with the current route shape"
   assert.equal(response.body[0].cheapest_price, 620);
   assert.equal(response.body[0].cheapest_store, "MegaMart");
   assert.equal(response.body[0].prices.length, 2);
+  // Prices are fetched for the pre-screened product IDs only — the full price
+  // table is never loaded, so getPrices stays untouched.
   assert.deepEqual(dataAccessCalls, {
     getStores: 1,
     getProducts: 1,
-    getPrices: 1,
+    getPrices: 0,
+    getPricesForProducts: 1,
   });
 });
 
@@ -335,7 +358,7 @@ test("POST /api/search returns matches for multiple terms", async () => {
     terms: ["rice", "milk"],
   });
 
-  assert.equal(response.status, 200);
+  assertStatus(response, 200);
   assert.ok(Array.isArray(response.body));
   assert.equal(response.body.length, 2);
   assert.deepEqual(
@@ -348,7 +371,7 @@ test("POST /api/search returns matches for multiple terms", async () => {
 test("POST /api/search filters out matched products that have zero price rows", async () => {
   const response = await requestJson("/api/search", { terms: ["panadol"] });
 
-  assert.equal(response.status, 200);
+  assertStatus(response, 200);
   assert.deepEqual(response.body, []);
 });
 
@@ -357,7 +380,7 @@ test("POST /api/search returns empty results when nothing matches", async () => 
     terms: ["xyznonexistent"],
   });
 
-  assert.equal(response.status, 200);
+  assertStatus(response, 200);
   assert.deepEqual(response.body, []);
 });
 
@@ -369,11 +392,12 @@ test("POST /api/search passes savingsMode and user coordinates through to the se
     userLng: -76.7466,
   });
 
-  assert.equal(response.status, 200);
+  assertStatus(response, 200);
   assert.equal(response.body.length, 1);
   assert.equal(response.body[0].prices.length, 1);
   assert.equal(response.body[0].prices[0].store_name, "Hi-Lo");
   assert.equal(typeof response.body[0].prices[0].distance_km, "number");
   assert.equal(cacheSetKeys.length, 1);
-  assert.equal(cacheSetKeys[0], "search:rice:0:18.0061:-76.7466");
+  // Trailing segment is storeId, absent here.
+  assert.equal(cacheSetKeys[0], "search:rice:0:18.0061:-76.7466:null");
 });

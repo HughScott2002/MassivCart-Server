@@ -120,7 +120,7 @@ installModuleStub(cacheModulePath, {
 installModuleStub(searchServiceModulePath, {
   async performSearch() {
     searchCallCount += 1;
-    return searchResults;
+    return { results: searchResults };
   },
 });
 
