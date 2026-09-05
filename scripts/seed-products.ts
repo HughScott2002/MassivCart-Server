@@ -253,6 +253,7 @@ async function main() {
   const BATCH_SIZE = 50;
   let totalInserted = 0;
   let totalSkipped = 0;
+  let failedBatches = 0;
 
   for (let i = 0; i < allProducts.length; i += BATCH_SIZE) {
     const batch = allProducts.slice(i, i + BATCH_SIZE);
@@ -272,6 +273,7 @@ async function main() {
     if (error) {
       logError(`Batch upsert failed (batch ${Math.floor(i / BATCH_SIZE) + 1})`, error);
       totalSkipped += batch.length;
+      failedBatches += 1;
     } else {
       const inserted = data?.length ?? 0;
       totalInserted += inserted;
@@ -288,7 +290,17 @@ async function main() {
     total: allProducts.length,
     inserted: totalInserted,
     skipped: totalSkipped,
+    failedBatches,
   });
+
+  // A seeder that writes nothing and exits 0 is how the catalog sat at 15
+  // placeholder rows for months: every batch was failing with 42P10 while the
+  // run reported success. A failed batch is a failed seed.
+  if (failedBatches > 0) {
+    throw new Error(
+      `${failedBatches} of ${Math.ceil(allProducts.length / BATCH_SIZE)} batches failed — ${totalSkipped} products not written`,
+    );
+  }
 }
 
 main().catch((err: unknown) => {
